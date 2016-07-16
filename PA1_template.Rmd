@@ -1,25 +1,225 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
+output:
+  html_document: 
     keep_md: true
 ---
+
+## Introduction
+
+It is now possible to collect a large amount of data about personal movement using activity monitoring devices such as a [Fitbit][1], [Nike Fuelband][2], or [Jawbone Up][3]. These type of devices are part of the "quantified self" movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. But these data remain under-utilized both because the raw data are hard to obtain and there is a lack of statistical methods and software for processing and interpreting the data.
+
+[1]: http://wwww.fitbit.com "Fitbit"
+[2]: http://www.nike.com/us/en_us/c/nikeplus-fuelband "Nike Fuelband"
+[3]: https://jawbone.com/up "Jawbone Up"
+
+This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
+
+The data for this assignment can be downloaded from the course web site:
+
+* Dataset: [Activity monitoring data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip) [52K]
+
+The variables included in this dataset are:
+
+* steps: Number of steps taking in a 5-minute interval (missing values are coded as NA)
+* date: The date on which the measurement was taken in YYYY-MM-DD format
+* interval: Identifier for the 5-minute interval in which measurement was taken
+
+The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset.
+
+
+## Load Packages
+
+Load the necessary packages to process
+``` {r loadLibraries, message=FALSE, warning=FALSE}
+library(chron)
+library(ggplot2)
+library(gridExtra)
+library(Hmisc)
+library(lattice)
+library(plyr)
+```
 
 
 ## Loading and preprocessing the data
 
+Read the dataset
+``` {r readDataset}
+dataActivity <- read.csv("activity.csv", colClasses = c("integer", "Date", "integer"))
+str(dataActivity)
+```
 
 
 ## What is mean total number of steps taken per day?
 
+For this part of the assignment, it was ignored the missing values in the dataset.
+
+1. Calculate the total number of steps taken per day - NA's ignored
+```{r totalStepsTaken}
+stepsDay <- ddply(dataActivity, "date", summarise, sum = sum(steps, na.rm=TRUE))
+head(stepsDay, 10)
+```
+
+
+2. Make a histogram of the total number of steps taken each day
+```{r histStepsTaken, fig.height = 4, fig.width = 9.5}
+ggplot(stepsDay, aes(date, sum)) + geom_bar(stat = "identity", colour = "red", width = 1, fill = "red") + 
+    labs(title = "Total of steps taken per day", x = "Date", y = "Number of steps")
+```
+
+
+3. Calculate and report the mean and median of the total number of steps taken per day
+```{r reportStepsTaken}
+options(scipen = 1, digits = 2)
+totalStepsBefore <- sum(stepsDay$sum)
+meanStepsBefore <- mean(stepsDay$sum, na.rm = TRUE)
+medianStepsBefore <- median(stepsDay$sum, na.rm = TRUE)
+```
+
+The total of steps taken in this period is **`r totalStepsBefore`**, with a mean of the **`r meanStepsBefore`** steps per day and a median of the **`r medianStepsBefore`** steps (ignored NA values).
 
 
 ## What is the average daily activity pattern?
 
+1. Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis).
+```{r plot5minAvgSteps, fig.height = 5, fig.width = 9.5}
+stepsAverage <- ddply(dataActivity, "interval", summarise, mean = mean(steps, na.rm=TRUE))
+head(stepsAverage, 10)
+ggplot(stepsAverage, aes(interval, mean)) + geom_line(color = "red", size = 0.65) + 
+    labs(title = "Average of steps of the 5-minute interval", x = "5-minute intervals", y = "Average of steps")
+```
+
+
+2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+```{r maxNumberSteps}
+options(scipen = 1, digits = 2)
+maxNumbSteps <- stepsAverage[stepsAverage$mean == max(stepsAverage$mean, na.rm = TRUE), ]
+maxNumbSteps
+```
+
+The interval with the maximum number of steps is **`r maxNumbSteps$interval`** with a mean of the **`r maxNumbSteps$mean`** steps per day.
 
 
 ## Imputing missing values
 
+Note that there are a number of days/intervals where there are missing values (coded as NA). The presence of missing days may introduce bias into some calculations or summaries of the data.
+
+1. Calculate and report the total number of missing values in the dataset.
+```{r totalMissingValues}
+options(digits = 2, scipen = 1)
+totalValues <- nrow(dataActivity)
+totalNA <- sum(is.na(dataActivity))
+```
+
+The total number of missing values is **`r totalNA`** (**`r totalNA / totalValues * 100`%** of total)
+
+2. Devise a strategy for filling in all of the missing values in the dataset. It was done **two** simulations or strategies, one using *random values* and other using *mean value*.
+
+For **random method**, it was used the *impute* function from *Hmisc* package. This function do simple and transcan imputation and print, summarize, and subscript variables that have NAs filled-in with imputed values. The simple imputation method involves filling in NAs with constants, with a specified single-valued function of the non-NAs, or from a sample (with replacement) from the non-NA values (this is useful in multiple imputation). More complex imputations can be done with the transcan function, which also works with the generic methods shown here, i.e., impute can take a transcan object and use the imputed values created by transcan (with imputed=TRUE) to fill-in NAs. The print method places * after variable values that were imputed. The summary method summarizes all imputed values and then uses the next summary method available for the variable. The subscript method preserves attributes of the variable and subsets the list of imputed values corresponding with how the variable was subsetted. The is.imputed function is for checking if observations are imputed.
+
+The other method, **5-minute Interval Mean Method**, We used the means intevals 5 minutes to complete the missing value respectively.
+
+3. Create a new dataset that is equal to the original dataset but with the missing data filled in. There are two datasets.
+
+*Random Method*
+```{r imputedRandom}
+dataActivity$imputedRandom <- with(dataActivity, impute(steps, 'random'))
+summary(dataActivity$imputedRandom)
+```
+
+*5-minute Interval Mean Method*
+```{r imputedMean}
+dataActivity$imputedMean <- dataActivity$steps
+
+for (index in 1:nrow(dataActivity))
+    if (is.na(dataActivity$imputedMean[index]))
+        dataActivity$imputedMean[index] <- 
+            stepsAverage[which(dataActivity$interval[index] == stepsAverage$interval), ]$mean
+summary(dataActivity$imputedMean)
+```
+
+
+4. Make a histogram of the total number of steps taken each day and calculate and report the mean and median total number of steps taken per day.
+
+Calculate the sums of datasets
+```{r calculateSums}
+stepsDayRandom <- ddply(dataActivity, "date", summarise, sumRandom = sum(imputedRandom, na.rm=TRUE))
+stepsDayMean <- ddply(dataActivity, "date", summarise, sumMean = sum(imputedMean, na.rm=TRUE))
+stepsDay <- merge(stepsDayRandom, stepsDayMean)
+head(stepsDay, 10)
+```
+
+Plot the datasets
+```{r plotImputedData, fig.height = 8, fig.width = 9.5}
+plot1 <- ggplot(stepsDay, aes(date, sumRandom)) + geom_bar(stat = "identity", colour = "red", width = 1, 
+    fill = "red") + labs(title = "Total of steps taken per day - Random Method", 
+    x = "Date", y = "Number of steps")
+
+plot2 <- ggplot(stepsDay, aes(date, sumMean)) + geom_bar(stat = "identity", colour = "red", width = 1, 
+    fill = "red") + labs(title = "Total of steps taken per day - 5-minute Mean Method", 
+    x = "Date", y = "Number of steps")
+
+grid.arrange(plot1, plot2, nrow=2)
+```
+
+Calculate the totals, means and medians after filling the missing values
+```{r reportStepsAfter}
+options(digits = 2)
+totalStepsRandom <- sum(stepsDay$sumRandom)
+meanStepsRandom <- mean(stepsDay$sumRandom, na.rm = TRUE)
+medianStepsRandom <- median(stepsDay$sumRandom, na.rm = TRUE)
+
+totalStepsMean <- sum(stepsDay$sumMean)
+meanStepsMean <- mean(stepsDay$sumMean, na.rm = TRUE)
+medianStepsMean <- median(stepsDay$sumMean, na.rm = TRUE)
+```
+
+Variables      |  With Missing Values |  Random Method       |  5-minute Interval Mean
+-------------- |  --------------      |  -------------       |  -----------
+Total of steps |`r as.integer(totalStepsBefore)`|`r as.integer(totalStepsRandom)`|`r as.integer(totalStepsMean)`
+Mean of steps  |`r meanStepsBefore`  |`r meanStepsRandom`  |`r meanStepsMean` 
+Median of steps|`r medianStepsBefore`|`r medianStepsRandom`|`r medianStepsMean`
+
+We can see that the values differ from the estimates from the first part. Both methods of filling missing values show this behavior. We can observe that the values are close too (diffence less than **`r abs(1 - totalStepsRandom / totalStepsMean) * 100`%** of total de steps). About the 5-minute interval mean method, we can note that the mean and median are the same value because we insert values with this tendency.
+
+About the total of steps, we can note that both methods present values very close too.
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+1.	Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend day.
+
+```{r weekType}
+dataActivity$week = as.factor(ifelse(is.weekend(dataActivity$date), "weekend", "weekday"))
+totalWeekend <- nrow(dataActivity[dataActivity$week == "weekend", ])
+totalWeekday <- nrow(dataActivity[dataActivity$week == "weekday", ])
+```
+
+It was measured **`r totalWeekend`** intervals on the weekend and **`r totalWeekday`** in the weekday.
+
+
+2.	Make a panel plot containing a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).
+
+Compute the means per interval for each filling type
+```{r computeMean}
+stepsWeekTypeRandom <- aggregate(imputedRandom ~ interval + week, dataActivity, mean)
+head(stepsWeekTypeRandom, 10)
+stepsWeekTypeMean <- aggregate(imputedMean ~ interval + week, dataActivity, mean)
+head(stepsWeekTypeMean, 10)
+```
+
+The graph with results is:
+```{r plotComparison, fig.height = 11, fig.width = 9.5}
+plot1 <- xyplot(stepsWeekTypeRandom$imputedRandom ~ stepsWeekTypeRandom$interval | stepsWeekTypeRandom$week, 
+    layout = c(1,2), type = "l", main = "Average Steps by Interval - Random Method", col = "red", 
+    xlab = "Interval", ylab = "Number of steps", width = 1)
+plot2 <- xyplot(stepsWeekTypeMean$imputedMean ~ stepsWeekTypeMean$interval | stepsWeekTypeMean$week, 
+    layout = c(1,2), type = "l", main = "Average Steps by Interval - 5-minute interval Mean Method", 
+    col = "red", xlab = "Interval", ylab = "Number of steps", width = 1)
+
+grid.arrange(plot1, plot2, nrow=2)
+```
+
+We can note that the behavior is close for both filling missing values methods. But if we compare weekday with weekend data for both methods we can't note a great difference in terms of behavior because in some part of period presents higher average for weekend and other case for weekday.
+
+
